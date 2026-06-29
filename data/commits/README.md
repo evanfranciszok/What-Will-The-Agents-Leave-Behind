@@ -13,18 +13,16 @@ the box:
 - `microsoft_data-formulator_commits.json` — 39 Copilot-authored commits (Listing 3)
 
 The full set of 6,299 `<owner>_<repo>_commits.json` files is **not** committed
-to Git (~265 MB uncommitted, ~46 MB compressed). Download `commits.zip` from
-Google Drive and extract it here.
+to Git. Download `commits.zip` from Hugging Face and extract it here.
 
 ## Download the full set
 
-**Google Drive (both bundles):** <https://drive.google.com/drive/folders/1R3uiO6dt9gWEq_2njwS-ve4DawxvpsS1?usp=sharing>
-
-After downloading, place `commits.zip` at `data/commits.zip` (project root
-relative path) and extract:
+**Hugging Face dataset:** <https://huggingface.co/datasets/yueyuel/tech-debt-ai-coding>
 
 ```bash
 # from the repo root
+pip install -U huggingface_hub
+hf download yueyuel/tech-debt-ai-coding commits.zip --repo-type dataset --local-dir data/
 unzip data/commits.zip -d data/
 ls data/commits/*.json | wc -l   # should print 6299 (plus this README)
 ```

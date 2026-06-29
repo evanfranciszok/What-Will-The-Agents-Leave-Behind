@@ -5,6 +5,7 @@ Replication package for the paper:
 > **Debt Behind the AI Boom: A Large-Scale Empirical Study of AI-Generated Code in the Wild**
 > Yue Liu, Ratnadira Widyasari, Yanjie Zhao, Ivana Clairine Irsan, Junkai Chen, David Lo
 > [arXiv:2603.28592](https://arxiv.org/abs/2603.28592)
+> 📦 Data: [huggingface.co/datasets/yueyuel/tech-debt-ai-coding](https://huggingface.co/datasets/yueyuel/tech-debt-ai-coding)
 
 We mined 302.6K AI-authored commits from 6,299 GitHub repositories across five
 AI coding assistants (GitHub Copilot, Claude, Cursor, Gemini, Devin), ran static
@@ -31,7 +32,7 @@ tech-debt-ai-coding/
 
 The repository ships **two demo repos** (`superagent-ai/superagent` and
 `microsoft/data-formulator`) so the dashboard works out of the box. The
-full 6,299-repo dataset lives on Google Drive — see *Data downloads* below.
+full 6,299-repo dataset lives on [Hugging Face](https://huggingface.co/datasets/yueyuel/tech-debt-ai-coding) — see *Data downloads* below.
 
 ---
 
@@ -62,8 +63,8 @@ demo repos. Hit Ctrl+C in the terminal to stop the server.
 ### T2 — Re-aggregate
 
 ```bash
-# 1. Download results-out.zip from Google Drive (see Data downloads).
-#    Place it at the project root, then:
+# 1. Download results-out.zip from Hugging Face (see Data downloads).
+hf download yueyuel/tech-debt-ai-coding results-out.zip --repo-type dataset --local-dir .
 unzip results-out.zip -d results/
 
 # 2. Re-aggregate
@@ -75,8 +76,8 @@ Compare the new `results/out/aggregate_summary.json` to the one shipped here.
 ### T3 — Full re-run from raw commits
 
 ```bash
-# 1. Download commits.zip from Google Drive (see Data downloads).
-#    Place it at data/commits.zip, then:
+# 1. Download commits.zip from Hugging Face (see Data downloads).
+hf download yueyuel/tech-debt-ai-coding commits.zip --repo-type dataset --local-dir data/
 unzip data/commits.zip -d data/
 
 # 2. Install analyzer dependencies
@@ -94,14 +95,22 @@ python3 main.py     # → 2 (Batch analyze) → directory: data/commits
 
 ## Data downloads
 
-The full data is too large to ship in Git. Both bundles live on Google Drive:
+The full data is too large to ship in Git. Both bundles are hosted on **Hugging Face**:
 
-| Bundle | Compressed | Contents |
-|---|---|---|
-| `commits.zip` | ~46 MB | All 6,299 `<repo>_commits.json` files (input to T3) |
-| `results-out.zip` | ~940 MB | Per-repo `debt_metrics.json`, `issue_survival.json`, `lifecycle_metrics.json`, `destiny_metrics.json`, `summary.json` and `debug/` for all 6,299 repos (input to T2) |
+**📦 Dataset:** <https://huggingface.co/datasets/yueyuel/tech-debt-ai-coding>
 
-**Google Drive (both bundles):** <https://drive.google.com/drive/folders/1R3uiO6dt9gWEq_2njwS-ve4DawxvpsS1?usp=sharing>
+| Bundle | Contents |
+|---|---|
+| `commits.zip` | All 6,299 `<repo>_commits.json` files (input to T3) |
+| `results-out.zip` | Per-repo `debt_metrics.json`, `issue_survival.json`, `lifecycle_metrics.json`, `destiny_metrics.json`, `summary.json` and `debug/` for all 6,299 repos (input to T2) |
+
+Download with the `huggingface_hub` client (resumes automatically if interrupted):
+
+```bash
+pip install -U huggingface_hub
+hf download yueyuel/tech-debt-ai-coding results-out.zip --repo-type dataset --local-dir .
+hf download yueyuel/tech-debt-ai-coding commits.zip     --repo-type dataset --local-dir .
+```
 
 After downloading, follow the **T2** / **T3** commands above to plug them in.
 

@@ -14,17 +14,25 @@ on demand.
 | `validation/` | 460 KB | Manually labeled samples used for the Cohen's κ validation in §IV-D. See `validation/ai_identifying/` (attribution sample) and `validation/vul_check/` (issue sample). |
 | `exploratory/` | small | Intermediate JSON outputs from paper-example finder scripts. Not required for reproduction, kept for transparency. |
 
-## External data (Google Drive)
+## External data (Hugging Face)
 
-These bundles are hosted on Google Drive because they exceed GitHub's per-file
-limit and would balloon the repository size.
+These bundles are hosted on Hugging Face (where downloads are counted) because
+they exceed GitHub's per-file limit and would balloon the repository size.
 
-**Google Drive (both bundles):** <https://drive.google.com/drive/folders/1R3uiO6dt9gWEq_2njwS-ve4DawxvpsS1?usp=sharing>
+**Hugging Face dataset:** <https://huggingface.co/datasets/yueyuel/tech-debt-ai-coding>
 
-| Bundle | Compressed | Uncompressed | Contents |
-|---|---|---|---|
-| `commits.zip` | ~46 MB | ~265 MB | All 6,299 `<repo>_commits.json` files. Required for **Tier 3** (full re-run from raw commits). |
-| `results-out.zip` | ~940 MB | ~17 GB | Per-repo `debt_metrics.json`, `issue_survival.json`, `lifecycle_metrics.json`, `destiny_metrics.json`, `summary.json` and `debug/` for all 6,299 repos. Required for **Tier 2** (re-aggregate from saved analyzer output). |
+| Bundle | Contents |
+|---|---|
+| `commits.zip` | All 6,299 `<repo>_commits.json` files. Required for **Tier 3** (full re-run from raw commits). |
+| `results-out.zip` | Per-repo `debt_metrics.json`, `issue_survival.json`, `lifecycle_metrics.json`, `destiny_metrics.json`, `summary.json` and `debug/` for all 6,299 repos. Required for **Tier 2** (re-aggregate from saved analyzer output). |
+
+Download with the `huggingface_hub` client (resumes automatically if interrupted):
+
+```bash
+pip install -U huggingface_hub
+hf download yueyuel/tech-debt-ai-coding results-out.zip --repo-type dataset --local-dir .
+hf download yueyuel/tech-debt-ai-coding commits.zip     --repo-type dataset --local-dir .
+```
 
 The `aggregate_summary.json` already in [`../results/out/`](../results/out/)
 covers **Tier 1** (verify the paper's headline numbers); no external download
