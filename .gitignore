@@ -14,6 +14,7 @@ __pycache__/
 data/repos/                 # cloned repository cache (very large)
 data/pipeline_settings.json # CLI auto-generated settings
 *.log
+venv/
 
 # Large data not committed (downloaded from Google Drive — see data/README.md)
 # Demo files in data/commits/ ARE committed; the rest are generated/downloaded.
