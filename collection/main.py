@@ -409,7 +409,7 @@ def _fetch_top_repos_from_github(min_stars: int, created_before: str,
         current_star_repo_count = 0
 
         while True:
-            star_query = f"stars:>= {lowest_star} " if star_increment is None else f"stars:{lowest_star}..{lowest_star+star_increment-1} "
+            star_query = f"stars:>={lowest_star} " if star_increment is None else f"stars:{lowest_star}..{lowest_star+star_increment-1} "
             response = session.get(
                 "https://api.github.com/search/repositories",
                 params={"q": star_query + query, "per_page": 1},
@@ -440,6 +440,7 @@ def _fetch_top_repos_from_github(min_stars: int, created_before: str,
 
             star_increment = increment_set[increment_idx]
 
+        star_query = f"stars:>={lowest_star} " if star_increment is None else f"stars:{lowest_star}..{lowest_star+star_increment-1} "
         lowest_star += star_increment if star_increment is not None else 0
         logger.info(f"   ⭐ Star query \"{star_query}\" resulting in {current_star_repo_count} repos (still to scan: {total_repos_to_discover-total_scanned_repos:,})")
         total_scanned_repos += min(current_star_repo_count , 1000)
