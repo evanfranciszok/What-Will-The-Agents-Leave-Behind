@@ -22,7 +22,7 @@ class CommitInfo:
     author_email: str = ""
     created_at: str = ""
     has_human_coauthor: bool = False
-    
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -47,11 +47,11 @@ class RepoStats:
     commit_shas: Dict[str, List[str]] = field(default_factory=dict)
     detection_methods: Dict[str, str] = field(default_factory=dict)
     has_human_coauthor: bool = False
-    
+
     @property
     def total_commits(self) -> int:
         return sum(self.commit_counts.values())
-    
+
     def to_dict(self) -> dict:
         return {
             "full_name": self.full_name,
@@ -85,14 +85,14 @@ class AICommit:
     message: str
     date: str
     url: str
-    
+
     # Author role - is AI the sole author or a co-author?
     author_role: str = ""  # "sole_author" | "coauthor"
-    
+
     # What AI identifier matched (the pattern that triggered detection)
     ai_identifier: str = ""  # e.g., "claude[bot]", "noreply@anthropic.com"
     ai_identifier_type: str = ""  # "author_name" | "author_email" | "actor" | "coauthor_name" | "coauthor_email"
-    
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -104,7 +104,8 @@ class RepoScanResult:
     total_commits_scanned: int
     ai_commits: List[AICommit] = field(default_factory=list)
     tools_found: dict = field(default_factory=dict)  # tool -> count
-    
+    exclusion_reason: str | None = None
+
     def to_dict(self) -> dict:
         return {
             "repo": self.repo,

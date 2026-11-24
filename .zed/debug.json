@@ -1,0 +1,33 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "label": "Debug top-scan",
+    "request": "launch",
+    "adapter": "Debugpy",
+
+    "envFile": "$ZED_WORKTREE_ROOT/collection/.env",
+    "program": "$ZED_WORKTREE_ROOT/collection/main.py",
+    "cwd": "$ZED_WORKTREE_ROOT/collection",
+    "python": "$ZED_WORKTREE_ROOT/venv/bin/python",
+
+    "args": [
+      "top-scan",
+      "--languages",
+      "C#",
+      "--min-stars",
+      "100",
+      "--since",
+      "2025-10-01",
+      "--created-before",
+      "2023-11-01",
+      "--limit",
+      "10"
+      // "--max-pages",
+      // "2",
+      // "--force"
+    ]
+  }
+]

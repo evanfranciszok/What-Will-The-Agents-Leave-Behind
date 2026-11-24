@@ -4,8 +4,11 @@ Git clone-based commits collector.
 No API rate limits - clones repo to tmp/, scans commits, then deletes.
 """
 import logging
+import json
+import math
 import subprocess
 import shutil
+from datetime import date
 from pathlib import Path
 from typing import List, Optional, Generator
 
@@ -20,7 +23,7 @@ TMP_DIR = Path(__file__).resolve().parent.parent / "tmp"
 
 class GitCommitsCollector:
     """Collect and scan commits by cloning repos locally."""
-    
+
     def __init__(self, clone_dir: Optional[str] = None, keep_clone: bool = False):
         """
         Args:
@@ -30,7 +33,7 @@ class GitCommitsCollector:
         self.clone_dir = Path(clone_dir) if clone_dir else TMP_DIR
         self.clone_dir.mkdir(parents=True, exist_ok=True)
         self.keep_clone = keep_clone
-    
+
     def _run_git(self, args: List[str], cwd: str, timeout: int = 300) -> str:
         """Run a git command and return output."""
         try:
@@ -50,12 +53,12 @@ class GitCommitsCollector:
         except Exception as e:
             logger.error(f"git error: {e}")
             return ""
-    
+
     def _clone_repo(self, repo_url: str, clone_path: Path) -> bool:
         """Clone a repo. Returns True on success."""
         if clone_path.exists():
             shutil.rmtree(clone_path)
-        
+
         logger.info(f"   Cloning {repo_url}...")
         try:
             result = subprocess.run(
@@ -70,60 +73,60 @@ class GitCommitsCollector:
         except Exception as e:
             logger.error(f"Clone error for {repo_url}: {e}")
             return False
-        
+
         if result.returncode != 0:
             logger.error(f"Clone failed: {result.stderr[:200]}")
             return False
-        
+
         return True
-    
-    def _get_commit_log(self, clone_path: Path, since: Optional[str] = None, 
+
+    def _get_commit_log(self, clone_path: Path, since: Optional[str] = None,
                         max_commits: Optional[int] = None) -> str:
         """Get formatted commit log."""
         # Format: SHA|author_name|author_email|committer_name|committer_email|date|message
         # Added committer info (%cn, %ce) to detect AI tools that appear as committer
         format_str = "%H|%an|%ae|%cn|%ce|%aI|%s%n%b%n---COMMIT_END---"
-        
+
         # Use --all to include commits from all branches (including orphaned/deleted branches)
         args = ["log", "--all", f"--format={format_str}"]
-        
+
         if since:
             args.append(f"--since={since}")
-        
+
         if max_commits:
             args.append(f"-n{max_commits}")
-        
+
         return self._run_git(args, str(clone_path), timeout=120)
-    
+
     def _parse_commits(self, log_output: str, repo_name: str) -> Generator[dict, None, None]:
         """Parse git log output into commit dicts."""
         if not log_output:
             return
-        
+
         commits = log_output.split("---COMMIT_END---")
-        
+
         for commit_text in commits:
             commit_text = commit_text.strip()
             if not commit_text:
                 continue
-            
+
             lines = commit_text.split("\n")
             if not lines:
                 continue
-            
+
             # First line has the main info
             first_line = lines[0]
             parts = first_line.split("|", 6)
-            
+
             if len(parts) < 7:
                 continue
-            
+
             sha, author_name, author_email, committer_name, committer_email, date, subject = parts
-            
+
             # Rest is the body (including Co-authored-by)
             body = "\n".join(lines[1:]) if len(lines) > 1 else ""
             message = subject + "\n" + body
-            
+
             yield {
                 "sha": sha,
                 "author_name": author_name,
@@ -134,47 +137,122 @@ class GitCommitsCollector:
                 "message": message,
                 "url": f"https://github.com/{repo_name}/commit/{sha}"
             }
-    
+
+    def get_unique_author_count(self, clone_path: Path) -> int:
+        """
+        Get unique authors in the git repository using shortlog
+
+        Returns:
+            count of unique authos which might also include AI authors
+        """
+        try:
+            result = subprocess.run(
+                ["git", "shortlog", "-s", "-e", "HEAD"],
+                cwd=clone_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            # Each line in shortlog represents one unique author
+            lines = result.stdout.strip().splitlines()
+            return len(lines)
+        except Exception:
+            return 0
+
+    def get_avg_commits(self, clone_path: Path) -> int:
+        """
+        Get avg commits per month of the git repo
+
+        Returns:
+            count of unique authos which might also include AI authors
+        """
+        try:
+            total_commits = subprocess.run(
+                ["git", "rev-list", "--count", "HEAD"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            commit_dates = subprocess.run(
+                ["git", "log", "--format=%ad", "--date=short", "--reverse"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+
+            first_commit_date = commit_dates.splitlines()[0] if commit_dates else None
+
+            if first_commit_date is None:
+                return 0
+
+            first_month = date.fromisoformat(first_commit_date[:7] + "-01")
+            current_month = date.today().replace(day=1)
+
+            months = (
+                (current_month.year - first_month.year) * 12
+                + current_month.month - first_month.month
+                + 1
+            )
+            return round(int(total_commits) / months)
+        except Exception:
+            return 0
+
     def scan_repo(self, repo_full_name: str,
                   since: Optional[str] = None,
                   max_commits: Optional[int] = None) -> RepoScanResult:
         """
         Scan a repo for AI-authored commits by cloning it.
-        
+
         Args:
             repo_full_name: Full repo name like "n8n-io/n8n"
             since: Only commits after this date (e.g., "2024-01-01")
             max_commits: Maximum commits to scan
-        
+
         Returns:
             RepoScanResult with detected AI commits
         """
         parts = repo_full_name.split("/")
         if len(parts) != 2:
             raise ValueError(f"Invalid repo name: {repo_full_name}. Use format 'owner/repo'")
-        
+
         owner, repo = parts
         repo_url = f"https://github.com/{repo_full_name}.git"
         clone_path = self.clone_dir / f"{owner}_{repo}"
-        
+
         logger.info(f"🔍 Scanning {repo_full_name} for AI commits (git clone)...")
-        
+
         result = RepoScanResult(repo=repo_full_name, total_commits_scanned=0)
         tools_count = {}
-        
+
         try:
             # Clone the repo
             if not self._clone_repo(repo_url, clone_path):
                 logger.error(f"Failed to clone {repo_full_name}")
                 return result
-            
+
             # Get commit log
             log_output = self._get_commit_log(clone_path, since=since, max_commits=max_commits)
-            
+
+            # Quick checks for inclusions
+            author_count = self.get_unique_author_count(clone_path)
+            if author_count < 5:
+                result.exclusion_reason = f"Skipping {repo_full_name}: only {author_count} unique authors (< 5 required)"
+                return result
+
+            commits_per_month = self.get_avg_commits(clone_path)
+            if commits_per_month < 10:
+                result.exclusion_reason = f"Skipping {repo_full_name}: Too few avg commits, only {commits_per_month} per month detected (>= 10 required)"
+                return result
+
+            human_authors = set()
+
             # Parse and scan commits
             for commit_data in self._parse_commits(log_output, repo_full_name):
                 result.total_commits_scanned += 1
-                
+
                 # Detect AI from author first
                 detection = detect_ai_commit(
                     author_name=commit_data["author_name"],
@@ -182,7 +260,7 @@ class GitCommitsCollector:
                     commit_message=commit_data["message"],
                     actor_login=""  # No actor from git log
                 )
-                
+
                 # If not found, also check committer (for aider-chat-bot, etc.)
                 if not detection and commit_data.get("committer_name"):
                     committer_name = commit_data["committer_name"]
@@ -199,7 +277,7 @@ class GitCommitsCollector:
                             # Mark as committer detection
                             detection["detection_method"] = "committer"
                             detection["ai_identifier_type"] = "committer_" + detection["ai_identifier_type"]
-                
+
                 if detection:
                     ai_commit = AICommit(
                         sha=commit_data["sha"],
@@ -218,19 +296,29 @@ class GitCommitsCollector:
                     )
                     result.ai_commits.append(ai_commit)
                     tools_count[detection["tool_key"]] = tools_count.get(detection["tool_key"], 0) + 1
-            
+                else:
+                    # It's a probably a human commit. Track the unique author email or name
+                    author_email = commit_data.get("author_email", "").lower().strip()
+                    if author_email:
+                        human_authors.add(author_email)
+
             result.tools_found = tools_count
-            
+
         finally:
             # Clean up clone
             if not self.keep_clone and clone_path.exists():
                 logger.info(f"   Cleaning up clone...")
                 shutil.rmtree(clone_path, ignore_errors=True)
-        
-        logger.info(f"✅ Scanned {result.total_commits_scanned} commits, found {len(result.ai_commits)} AI commits")
-        
+
+        if len(human_authors) < 5:
+            result.exclusion_reason = f"Skipping {repo_full_name}: only {len(human_authors)} unique non AI authors (> 5 required)"
+        elif len(result.ai_commits) < 10:
+            result.exclusion_reason = f"Skipping {repo_full_name}: only {len(result.ai_commits)} AI commits found (>= 10 required)"
+        else:
+            logger.info(f"✅ Scanned {result.total_commits_scanned} commits, found {len(result.ai_commits)} AI commits")
+
         return result
-    
+
     def print_summary(self, result: RepoScanResult) -> None:
         """Print scan results summary."""
         print("\n" + "=" * 70)
@@ -239,11 +327,11 @@ class GitCommitsCollector:
         print(f"Total commits scanned: {result.total_commits_scanned:,}")
         print(f"AI commits found: {len(result.ai_commits):,}")
         print()
-        
+
         if result.tools_found:
             print("AI Tools Detected:")
             for tool, count in sorted(result.tools_found.items(), key=lambda x: -x[1]):
                 name = get_tool_name(tool)
                 print(f"  {name}: {count}")
-        
+
         print("=" * 70)

@@ -31,3 +31,4 @@ results-out.zip
 results/out/*/
 !results/out/superagent-ai_superagent/
 !results/out/microsoft_data-formulator/
+collection/.env
