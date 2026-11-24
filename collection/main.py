@@ -422,7 +422,7 @@ def _fetch_top_repos_from_github(min_stars: int, created_before: str,
                 if increment_idx == 0:
                     logger.warning(" ⚠️ query can not be smaller and still overflows, can not capture all results")
                     break
-                if skew_direction in (0, -1): # prevent infinite switching
+                if skew_direction in (0, -1): # prevent infinite switching between star count but might cause missing some repos
                     increment_idx -= 1
                     skew_direction = -1
                 else:
@@ -441,8 +441,8 @@ def _fetch_top_repos_from_github(min_stars: int, created_before: str,
             star_increment = increment_set[increment_idx]
 
         lowest_star += star_increment if star_increment is not None else 0
-        logger.info(f" ⭐ Star query \"{star_query}\" resulting in {current_star_repo_count} repos (still to scan: {total_repos_to_discover-total_scanned_repos:,})")
-        total_scanned_repos += max(current_star_repo_count , 1000)
+        logger.info(f"   ⭐ Star query \"{star_query}\" resulting in {current_star_repo_count} repos (still to scan: {total_repos_to_discover-total_scanned_repos:,})")
+        total_scanned_repos += min(current_star_repo_count , 1000)
 
         for page in range(1, max_pages + 1):
             try:
