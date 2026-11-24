@@ -24,9 +24,9 @@
       "--created-before",
       "2023-11-01",
       "--limit",
-      "10"
-      // "--max-pages",
-      // "2",
+      "10",
+      "--max-pages",
+      "200",
       // "--force"
     ]
   }

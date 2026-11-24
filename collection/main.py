@@ -342,6 +342,7 @@ def cmd_batch_scan(args):
     print("=" * 70)
 
 
+
 # =============================================================================
 # TOP-SCAN COMMAND - Fetch top GitHub repos and scan for AI commits
 # Fills the gap after Oct 2025 when BigQuery lost commit data
@@ -375,7 +376,6 @@ def _fetch_top_repos_from_github(min_stars: int, created_before: str,
     # Build search query
 
     query_parts = [
-        f"stars:>={min_stars}",
         "archived:false",
         "is:public",
         "-is:fork",
@@ -384,62 +384,113 @@ def _fetch_top_repos_from_github(min_stars: int, created_before: str,
     if language:
         query_parts.append(f"language:{language}")
     query = " ".join(query_parts)
-    # query_parts = [f"stars:>={min_stars}", f"pushed:>={pushed_after}"]
-    # if language:
-    #     query_parts.append(f"language:{language}")
-    # query_parts.append("fork:false")  # Exclude forks
-    # query = " ".join(query_parts)
 
     repos = []
     per_page = 100
+    upper_query_limit = 1000
 
-    for page in range(1, max_pages + 1):
-        try:
-            resp = session.get(
+    lowest_star = min_stars
+    increment_set = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
+    increment_idx = increment_set.index(100) # Default index
+    star_increment: int | None = increment_set[increment_idx]
+    total_scanned_repos = 0
+    star_query: str = f"stars:>={min_stars} "
+
+    test_response = session.get(
+        "https://api.github.com/search/repositories",
+        params={"q": star_query + query, "per_page": 1},
+        timeout=30,
+    )
+    total_repos_to_discover = test_response.json().get("total_count", 0)
+    # This logic is here to circumvent the 1000 repo limit on search query. We have to limit the scale of the search to still get all the repos
+    while star_increment is not None:
+
+        skew_direction = 0
+        current_star_repo_count = 0
+
+        while True:
+            star_query = f"stars:>= {lowest_star} " if star_increment is None else f"stars:{lowest_star}..{lowest_star+star_increment-1} "
+            response = session.get(
                 "https://api.github.com/search/repositories",
-                params={"q": query, "sort": "stars", "order": "desc",
-                        "per_page": per_page, "page": page},
+                params={"q": star_query + query, "per_page": 1},
                 timeout=30,
             )
-
-            if resp.status_code == 403:
-                logger.warning(f"Rate limit hit at page {page}. Waiting 60s...")
-                import time
-                time.sleep(60)
-                continue
-
-            if resp.status_code != 200:
-                logger.warning(f"Search API error {resp.status_code}: {resp.text[:200]}")
+            current_star_repo_count = response.json().get("total_count", 0)
+            if 600 <= current_star_repo_count <= upper_query_limit:
                 break
+            elif current_star_repo_count > upper_query_limit:
+                if increment_idx == 0:
+                    logger.warning(" ⚠️ query can not be smaller and still overflows, can not capture all results")
+                    break
+                if skew_direction in (0, -1): # prevent infinite switching
+                    increment_idx -= 1
+                    skew_direction = -1
+                else:
+                    break # prevent infinite switching
+            else:  # current_star_repo_count < 600
+                # Move to a larger star threshold
+                if increment_idx == len(increment_set) - 1:
+                    star_increment = None # No upper limit
+                    break
+                if skew_direction in (0, 1): # prevent infinite switching
+                    increment_idx += 1
+                    skew_direction = +1
+                else:
+                    break
 
-            data = resp.json()
-            items = data.get("items", [])
+            star_increment = increment_set[increment_idx]
 
-            if not items:
+        lowest_star += star_increment if star_increment is not None else 0
+        logger.info(f" ⭐ Star query \"{star_query}\" resulting in {current_star_repo_count} repos (still to scan: {total_repos_to_discover-total_scanned_repos:,})")
+        total_scanned_repos += max(current_star_repo_count , 1000)
+
+        for page in range(1, max_pages + 1):
+            try:
+                resp = session.get(
+                    "https://api.github.com/search/repositories",
+                    params={"q": star_query + query, "sort": "stars", "order": "desc",
+                            "per_page": per_page, "page": page},
+                    timeout=30,
+                )
+
+                if resp.status_code == 403:
+                    logger.warning(f"Rate limit hit at page {page}. Waiting 60s...")
+                    import time
+                    time.sleep(60)
+                    continue
+
+                if resp.status_code != 200:
+                    logger.warning(f"Search API error {resp.status_code}: {resp.text[:200]}")
+                    break
+
+                data = resp.json()
+                items = data.get("items", [])
+
+                if not items:
+                    break
+
+                for item in items:
+                    full_name = item.get("full_name", "")
+                    if full_name.lower() not in exclude_repos:
+                        repos.append({
+                            "full_name": full_name,
+                            "stars": item.get("stargazers_count", 0),
+                            "language": item.get("language"),
+                            "description": item.get("description"),
+                            "url": item.get("html_url", f"https://github.com/{full_name}"),
+                            "pushed_at": item.get("pushed_at"),
+                            "is_fork": item.get("fork", False),
+                        })
+
+                total_count = data.get("total_count", 0)
+                logger.info(f"   Page {page}: {len(items)} repos ")
+
+                if len(items) < per_page or page * per_page >= min(total_count, upper_query_limit):
+                    break
+
+            except Exception as e:
+                logger.error(f"Search error on page {page}: {e}")
                 break
-
-            for item in items:
-                full_name = item.get("full_name", "")
-                if full_name.lower() not in exclude_repos:
-                    repos.append({
-                        "full_name": full_name,
-                        "stars": item.get("stargazers_count", 0),
-                        "language": item.get("language"),
-                        "description": item.get("description"),
-                        "url": item.get("html_url", f"https://github.com/{full_name}"),
-                        "pushed_at": item.get("pushed_at"),
-                        "is_fork": item.get("fork", False),
-                    })
-
-            total_count = data.get("total_count", 0)
-            logger.info(f"   Page {page}: {len(items)} repos (total available: {total_count:,})")
-
-            if len(items) < per_page or page * per_page >= min(total_count, 1000):
-                break
-
-        except Exception as e:
-            logger.error(f"Search error on page {page}: {e}")
-            break
 
     return repos
 
@@ -492,7 +543,7 @@ def cmd_top_scan(args):
     seen = set()
 
     for lang in languages:
-        logger.info(f"📋 Searching {lang} repos...")
+        logger.info(f"📋 Searching {lang} repos ({args.max_pages} pages) ...")
         repos = _fetch_top_repos_from_github(
             min_stars=min_stars,
             created_before=created_before,
