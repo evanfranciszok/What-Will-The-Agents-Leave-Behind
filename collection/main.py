@@ -586,6 +586,17 @@ def cmd_top_scan(args):
     results_summary = []
     total = len(all_repos)
 
+    failed_criteria_path = output_dir / "scanned_but_failed_criteria.txt"
+    scanned_but_failed = set()
+    if failed_criteria_path.exists():
+        with open(failed_criteria_path, "r", encoding="utf-8") as f:
+            scanned_but_failed = {
+                line.strip()
+                for line in f
+                if line.strip()
+            }
+
+
     for i, repo_data in enumerate(all_repos):
         repo_name = repo_data["full_name"]
         repo_slug = repo_name.replace("/", "_")
@@ -594,6 +605,7 @@ def cmd_top_scan(args):
         # Skip if already scanned
         if output_path.exists() and not args.force:
             skipped += 1
+            logger.info(f" ⏩ [{i+1}/{total}] Skipping previously scanned and succeeded criteria")
             # Check if it had AI commits
             try:
                 existing = load_json(str(output_path))
@@ -609,6 +621,11 @@ def cmd_top_scan(args):
                 pass
             continue
 
+        if repo_slug in scanned_but_failed and not args.force:
+            skipped += 1
+            logger.info(f" ⏩ [{i+1}/{total}] Skipping previously scanned but failed criteria")
+            continue
+
         logger.info(f"🔍 [{i+1}/{total}] Scanning {repo_name} ({repo_data['stars']:,} stars)...")
 
         try:
@@ -621,6 +638,12 @@ def cmd_top_scan(args):
             if result.exclusion_reason is not None:
                 skipped += 1
                 logger.info(f"   ⏩ {result.exclusion_reason}")
+                with open(
+                        output_dir / "scanned_but_failed_criteria.txt",
+                        "a",
+                        encoding="utf-8",
+                    ) as f:
+                        f.write(f"{repo_slug}\n")
                 continue
 
             save_json(result.to_dict(), str(output_path))
